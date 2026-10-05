@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CineData Analytics</title>
+<style>
+  :root {
+    --navy: #0d1b2a;
+    --gold: #c9a84c;
+    --teal: #1a6b52;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --line: #e2e4e8;
+    --text: #1e1e1e;
+    --muted: #5c6570;
+    --danger: #8c2f2f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  header {
+    background: var(--navy);
+    color: white;
+    padding: 28px 20px 22px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 1.6rem; }
+  header p { margin: 0; color: rgba(255,255,255,.8); }
+  main { max-width: 980px; margin: 0 auto; padding: 20px; }
+  .status, .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .status { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: .92rem; }
+  .status strong { color: var(--text); }
+  .aviso {
+    background: #fff8e6;
+    border-left: 4px solid var(--gold);
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin-top: 10px;
+  }
+  label { display: block; font-weight: 600; margin-bottom: 8px; }
+  textarea {
+    width: 100%;
+    min-height: 90px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    font: inherit;
+    resize: vertical;
+  }
+  .acoes { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  button, .chip {
+    font: inherit;
+    cursor: pointer;
+  }
+  button.primario {
+    background: var(--teal);
+    color: white;
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: 650;
+  }
+  button.primario:disabled { opacity: .6; cursor: wait; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 10px;
+    color: var(--navy);
+  }
+  .chip:hover { border-color: var(--teal); }
+  .resposta { white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; margin-top: 8px; }
+  th { text-align: left; background: var(--navy); color: white; padding: 8px 10px; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:nth-child(even) td { background: var(--bg); }
+  .barra-linha { display: grid; grid-template-columns: minmax(120px, 240px) 1fr auto; gap: 8px; align-items: center; margin: 6px 0; font-size: .9rem; }
+  .trilha { background: #e7ece9; border-radius: 99px; height: 10px; }
+  .trilha span { display: block; height: 10px; border-radius: 99px; background: var(--teal); }
+  details { margin-top: 12px; }
+  pre {
+    background: var(--navy);
+    color: #e8eef5;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: .82rem;
+  }
+  .erro { color: var(--danger); font-weight: 650; }
+  footer { text-align: center; color: var(--muted); font-size: .82rem; padding: 12px 0 28px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CineData Analytics</h1>
+  <p>Pergunte em português. O agente consulta a camada Gold e devolve só o que o banco respondeu.</p>
+</header>
+<main>
+  <section class="status" id="status">Carregando o catálogo…</section>
+
+  <section class="card">
+    <label for="pergunta">Pergunta</label>
+    <textarea id="pergunta" placeholder="Ex.: Top 10 filmes com maior receita em R$"></textarea>
+    <div class="acoes">
+      <button class="primario" id="enviar" type="button">Consultar</button>
+      <label style="font-weight:500; margin:0;">
+        <input type="checkbox" id="memoria" checked>
+        Lembrar desta conversa
+      </label>
+      <button type="button" id="limpar">Limpar memória</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <strong>Perguntas da atividade</strong>
+    <div class="chips" id="exemplos" style="margin-top:10px;"></div>
+  </section>
+
+  <section class="card" id="painel" hidden>
+    <div id="saida"></div>
+  </section>
+</main>
+<footer>Rocket Lab 2026 · CineData · consultas somente leitura</footer>
+<script>
+const historico = [];
+const statusEl = document.querySelector("#status");
+const perguntaEl = document.querySelector("#pergunta");
+const painel = document.querySelector("#painel");
+const saida = document.querySelector("#saida");
+const enviar = document.querySelector("#enviar");
+
+function moeda(valor) {
+  return "R$ " + Number(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function celula(coluna, valor) {
+  if (valor === null || valor === undefined) return "—";
+  const nome = coluna.toLowerCase();
+  if (nome === "ano_lancamento" || nome.startsWith("ano_")) return String(valor);
+  const numerico = typeof valor === "number";
+  if (numerico && (nome.endsWith("_brl") || /receita|lucro|orcamento/.test(nome))) return moeda(valor);
+  if (typeof valor === "number" && !Number.isInteger(valor)) {
+    return valor.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+  }
+  if (typeof valor === "number") return valor.toLocaleString("pt-BR");
+  return String(valor);
+}
+function escapar(texto) {
+  return String(texto)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+async function carregarStatus() {
+  const resposta = await fetch("/api/saude");
+  const dados = await resposta.json();
+  if (!resposta.ok) {
+    statusEl.innerHTML = `<span class="erro">${escapar(dados.detail || "Falha ao abrir o banco")}</span>`;
+    return;
+  }
+  statusEl.innerHTML = `
+    <span>Banco: <strong>${escapar(dados.banco)}</strong></span>
+    <span>Filmes: <strong>${Number(dados.filmes).toLocaleString("pt-BR")}</strong></span>
+    <span>Tabelas: <strong>${dados.tabelas}</strong></span>
+    <span>Chave OpenRouter: <strong>${dados.chave_configurada ? "configurada" : "ausente"}</strong></span>
+  `;
+  if (!dados.chave_configurada) {
+    statusEl.insertAdjacentHTML("beforeend", `<div class="aviso">Crie um arquivo .env com OPENROUTER_API_KEY para o agente chamar o modelo. O guia está em tutorial-openrouter.html.</div>`);
+  }
+}
+
+async function carregarExemplos() {
+  const resposta = await fetch("/api/exemplos");
+  const itens = await resposta.json();
+  const caixa = document.querySelector("#exemplos");
+  let categoria = "";
+  for (const item of itens) {
+    if (item.categoria !== categoria) {
+      categoria = item.categoria;
+      const titulo = document.createElement("div");
+      titulo.style.cssText = "width:100%; margin-top:8px; color:#5c6570; font-size:.8rem; text-transform:uppercase; letter-spacing:.04em;";
+      titulo.textContent = categoria;
+      caixa.appendChild(titulo);
+    }
+    const botao = document.createElement("button");
+    botao.type = "button";
+    botao.className = "chip";
+    botao.textContent = item.pergunta;
+    botao.addEventListener("click", () => {
+      perguntaEl.value = item.pergunta;
+      perguntaEl.focus();
+    });
+    caixa.appendChild(botao);
+  }
+}
+
+function desenharBarras(tabela) {
+  if (!tabela || !tabela.linhas.length) return "";
+  const colunaNumero = tabela.colunas.find((coluna) => typeof tabela.linhas[0][coluna] === "number" && !String(coluna).toLowerCase().startsWith("ano"));
+  const colunaNome = tabela.colunas.find((coluna) => typeof tabela.linhas[0][coluna] === "string");
+  if (!colunaNumero || !colunaNome) return "";
+  const maior = Math.max(...tabela.linhas.map((linha) => Math.abs(Number(linha[colunaNumero]) || 0))) || 1;
+  const linhas = tabela.linhas.slice(0, 10).map((linha) => {
+    const valor = Number(linha[colunaNumero]) || 0;
+    const largura = Math.max(2, Math.round(Math.abs(valor) / maior * 100));
+    const ano = linha.ano_lancamento ? ` (${linha.ano_lancamento})` : "";
+    return `<div class="barra-linha"><span>${escapar(linha[colunaNome])}${escapar(ano)}</span><div class="trilha"><span style="width:${largura}%"></span></div><strong>${escapar(celula(colunaNumero, valor))}</strong></div>`;
+  }).join("");
+  return `<h3 style="margin:16px 0 8px; font-size:1rem;">Comparativo</h3>${linhas}`;
+}
+
+function desenharTabela(tabela) {
+  if (!tabela || !tabela.linhas.length) return "";
+  const cabecalho = tabela.colunas.map((coluna) => `<th>${escapar(coluna.replaceAll("_", " "))}</th>`).join("");
+  const corpo = tabela.linhas.map((linha) => {
+    const celulas = tabela.colunas.map((coluna) => `<td>${escapar(celula(coluna, linha[coluna]))}</td>`).join("");
+    return `<tr>${celulas}</tr>`;
+  }).join("");
+  return `<div style="overflow-x:auto"><table><thead><tr>${cabecalho}</tr></thead><tbody>${corpo}</tbody></table></div>`;
+}
+
+async function consultar() {
+  const pergunta = perguntaEl.value.trim();
+  if (!pergunta) return;
+  enviar.disabled = true;
+  painel.hidden = false;
+  saida.innerHTML = "<p>Consultando a camada Gold…</p>";
+  const lembrar = document.querySelector("#memoria").checked;
+  try {
+    const resposta = await fetch("/api/perguntar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pergunta, historico: lembrar ? historico : [] }),
+    });
+    const dados = await resposta.json();
+    if (!resposta.ok) {
+      saida.innerHTML = `<p class="erro">${escapar(dados.detail || "Não foi possível consultar.")}</p>`;
+      return;
+    }
+    const sqls = (dados.consultas || []).map((consulta) => `<pre>${escapar(consulta.sql || "")}</pre>`).join("");
+    const origem = dados.cache ? "resposta em cache" : escapar(dados.modelo || "");
+    saida.innerHTML = `
+      <p class="resposta">${escapar(dados.resposta || "")}</p>
+      ${desenharBarras(dados.tabela)}
+      ${desenharTabela(dados.tabela)}
+      <details>
+        <summary>Consulta executada · ${origem}</summary>
+        ${sqls || "<p>Nenhum SQL foi executado.</p>"}
+      </details>
+    `;
+    if (lembrar) {
+      historico.push({ role: "user", content: pergunta });
+      historico.push({ role: "assistant", content: dados.resposta });
+      while (historico.length > 6) historico.shift();
+    }
+  } catch (erro) {
+    saida.innerHTML = `<p class="erro">Falha de rede ao falar com a API local.</p>`;
+  } finally {
+    enviar.disabled = false;
+  }
+}
+
+enviar.addEventListener("click", consultar);
+perguntaEl.addEventListener("keydown", (evento) => {
+  if ((evento.metaKey || evento.ctrlKey) && evento.key === "Enter") consultar();
+});
+document.querySelector("#limpar").addEventListener("click", () => {
+  historico.length = 0;
+  painel.hidden = false;
+  saida.innerHTML = "<p>Memória da conversa apagada.</p>";
+});
+carregarStatus();
+carregarExemplos();
+</script>
+</body>
+</html>

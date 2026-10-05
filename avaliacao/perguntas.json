@@ -1,0 +1,86 @@
+[
+  {
+    "id": "bilheteria_top10",
+    "categoria": "Bilheteria e finanças",
+    "pergunta": "Top 10 filmes com maior receita em R$",
+    "sql": "SELECT m.titulo, m.ano_lancamento, ROUND(f.receita_brl, 2) AS receita_brl\nFROM dim_movies m\nJOIN fact_movies_performance f ON f.sk_movie_id = m.sk_movie_id\nWHERE f.receita_brl > 0\nORDER BY f.receita_brl DESC\nLIMIT 10"
+  },
+  {
+    "id": "lucro_medio_genero",
+    "categoria": "Bilheteria e finanças",
+    "pergunta": "Lucro médio por gênero, considerando apenas filmes com receita informada",
+    "sql": "SELECT g.nome_genero, ROUND(AVG(f.lucro_brl), 2) AS lucro_medio_brl, COUNT(DISTINCT f.sk_movie_id) AS qtd_filmes\nFROM dim_genres g\nJOIN bridge_movie_genre bg ON bg.sk_genre_id = g.sk_genre_id\nJOIN fact_movies_performance f ON f.sk_movie_id = bg.sk_movie_id\nWHERE f.receita_brl > 0\nGROUP BY g.sk_genre_id, g.nome_genero\nORDER BY lucro_medio_brl DESC"
+  },
+  {
+    "id": "maior_margem",
+    "categoria": "Bilheteria e finanças",
+    "pergunta": "Filmes com maior margem de lucro, entre os que possuem receita e orçamento informados",
+    "sql": "SELECT m.titulo, m.ano_lancamento,\n       ROUND(f.lucro_brl * 1.0 / f.receita_brl, 4) AS margem,\n       ROUND(f.receita_brl, 2) AS receita_brl,\n       ROUND(f.orcamento_brl, 2) AS orcamento_brl\nFROM dim_movies m\nJOIN fact_movies_performance f ON f.sk_movie_id = m.sk_movie_id\nWHERE f.receita_brl > 0\n  AND f.orcamento_brl >= 100000\nORDER BY margem DESC\nLIMIT 10"
+  },
+  {
+    "id": "mais_populares",
+    "categoria": "Popularidade e engajamento",
+    "pergunta": "Os 5 filmes mais populares",
+    "sql": "SELECT m.titulo, m.ano_lancamento, ROUND(f.popularidade, 3) AS popularidade\nFROM dim_movies m\nJOIN fact_movies_performance f ON f.sk_movie_id = m.sk_movie_id\nWHERE f.popularidade IS NOT NULL\nORDER BY f.popularidade DESC\nLIMIT 5"
+  },
+  {
+    "id": "divergencia_notas",
+    "categoria": "Popularidade e engajamento",
+    "pergunta": "Filmes com maior divergência entre a nota TMDB e a nota IMDb",
+    "sql": "SELECT m.titulo, m.ano_lancamento, ROUND(f.nota_tmdb, 3) AS nota_tmdb, ROUND(f.nota_imdb, 3) AS nota_imdb,\n       ROUND(ABS(f.nota_tmdb - f.nota_imdb), 3) AS divergencia\nFROM dim_movies m\nJOIN fact_movies_performance f ON f.sk_movie_id = m.sk_movie_id\nWHERE f.nota_tmdb > 0\n  AND f.nota_imdb IS NOT NULL\n  AND f.qtd_imdb >= 500\nORDER BY divergencia DESC\nLIMIT 10"
+  },
+  {
+    "id": "nota_imdb_ano",
+    "categoria": "Popularidade e engajamento",
+    "pergunta": "Nota média IMDb por ano de lançamento",
+    "sql": "SELECT m.ano_lancamento, ROUND(AVG(f.nota_imdb), 3) AS nota_media_imdb, COUNT(*) AS qtd_filmes\nFROM dim_movies m\nJOIN fact_movies_performance f ON f.sk_movie_id = m.sk_movie_id\nWHERE f.nota_imdb IS NOT NULL\n  AND m.ano_lancamento IS NOT NULL\nGROUP BY m.ano_lancamento\nORDER BY m.ano_lancamento"
+  },
+  {
+    "id": "ator_cinco_anos",
+    "categoria": "Elenco e equipe",
+    "pergunta": "Ator com mais participações em filmes lançados nos últimos 5 anos",
+    "sql": "SELECT p.nome_pessoa, COUNT(DISTINCT m.sk_movie_id) AS participacoes\nFROM dim_people p\nJOIN bridge_movie_person b ON b.sk_person_id = p.sk_person_id\nJOIN dim_movies m ON m.sk_movie_id = b.sk_movie_id\nWHERE p.tipo_pessoa = 'Ator'\n  AND m.status_filme = 'Lançado'\n  AND m.ano_lancamento BETWEEN 2022 AND 2026\nGROUP BY p.sk_person_id, p.nome_pessoa\nORDER BY participacoes DESC\nLIMIT 5"
+  },
+  {
+    "id": "diretores_nota",
+    "categoria": "Elenco e equipe",
+    "pergunta": "Diretores com maior nota média (mínimo de 5 filmes)",
+    "sql": "SELECT p.nome_pessoa, ROUND(AVG(f.nota_imdb), 3) AS nota_media_imdb, COUNT(DISTINCT m.sk_movie_id) AS qtd_filmes\nFROM dim_people p\nJOIN bridge_movie_person b ON b.sk_person_id = p.sk_person_id\nJOIN dim_movies m ON m.sk_movie_id = b.sk_movie_id\nJOIN fact_movies_performance f ON f.sk_movie_id = m.sk_movie_id\nWHERE p.tipo_pessoa = 'Diretor'\n  AND f.nota_imdb IS NOT NULL\n  AND f.qtd_imdb >= 100\nGROUP BY p.sk_person_id, p.nome_pessoa\nHAVING COUNT(DISTINCT m.sk_movie_id) >= 5\nORDER BY nota_media_imdb DESC\nLIMIT 10"
+  },
+  {
+    "id": "dupla_ator_diretor",
+    "categoria": "Elenco e equipe",
+    "pergunta": "Dupla ator–diretor que mais trabalhou junta",
+    "sql": "SELECT a.nome_pessoa AS ator, d.nome_pessoa AS diretor, COUNT(DISTINCT ba.sk_movie_id) AS filmes_juntos\nFROM bridge_movie_person ba\nJOIN dim_people a ON a.sk_person_id = ba.sk_person_id AND a.tipo_pessoa = 'Ator'\nJOIN bridge_movie_person bd ON bd.sk_movie_id = ba.sk_movie_id\nJOIN dim_people d ON d.sk_person_id = bd.sk_person_id AND d.tipo_pessoa = 'Diretor'\nGROUP BY a.sk_person_id, a.nome_pessoa, d.sk_person_id, d.nome_pessoa\nORDER BY filmes_juntos DESC\nLIMIT 5"
+  },
+  {
+    "id": "filmes_por_genero",
+    "categoria": "Gêneros e produtoras",
+    "pergunta": "Quantidade de filmes por gênero",
+    "sql": "SELECT g.nome_genero, COUNT(DISTINCT bg.sk_movie_id) AS qtd_filmes\nFROM dim_genres g\nJOIN bridge_movie_genre bg ON bg.sk_genre_id = g.sk_genre_id\nGROUP BY g.sk_genre_id, g.nome_genero\nORDER BY qtd_filmes DESC"
+  },
+  {
+    "id": "produtora_lucro",
+    "categoria": "Gêneros e produtoras",
+    "pergunta": "Produtora com maior lucro total",
+    "sql": "SELECT c.nome_produtora, ROUND(SUM(f.lucro_brl), 2) AS lucro_total_brl, COUNT(DISTINCT f.sk_movie_id) AS qtd_filmes\nFROM dim_companies c\nJOIN bridge_movie_company bc ON bc.sk_company_id = c.sk_company_id\nJOIN fact_movies_performance f ON f.sk_movie_id = bc.sk_movie_id\nWHERE f.receita_brl > 0\nGROUP BY c.sk_company_id, c.nome_produtora\nORDER BY lucro_total_brl DESC\nLIMIT 5"
+  },
+  {
+    "id": "genero_margem",
+    "categoria": "Gêneros e produtoras",
+    "pergunta": "Gênero com maior margem de lucro média",
+    "sql": "SELECT g.nome_genero,\n       ROUND(SUM(f.lucro_brl) * 1.0 / SUM(f.receita_brl), 4) AS margem_media,\n       COUNT(DISTINCT f.sk_movie_id) AS qtd_filmes\nFROM dim_genres g\nJOIN bridge_movie_genre bg ON bg.sk_genre_id = g.sk_genre_id\nJOIN fact_movies_performance f ON f.sk_movie_id = bg.sk_movie_id\nWHERE f.receita_brl > 0\n  AND f.orcamento_brl > 0\nGROUP BY g.sk_genre_id, g.nome_genero\nORDER BY margem_media DESC\nLIMIT 5"
+  },
+  {
+    "id": "mais_avaliados",
+    "categoria": "Avaliações dos usuários",
+    "pergunta": "Filmes mais avaliados pelos usuários",
+    "sql": "SELECT m.titulo, m.ano_lancamento, r.qtd_avaliacoes_usuarios, ROUND(r.nota_media_usuarios, 3) AS nota_media_usuarios\nFROM dim_reviews r\nJOIN dim_movies m ON m.sk_movie_id = r.sk_movie_id\nORDER BY r.qtd_avaliacoes_usuarios DESC\nLIMIT 10"
+  },
+  {
+    "id": "diverge_usuarios_imdb",
+    "categoria": "Avaliações dos usuários",
+    "pergunta": "Filmes em que a nota média dos usuários mais diverge da nota IMDb",
+    "sql": "SELECT m.titulo, m.ano_lancamento,\n       ROUND(r.nota_media_usuarios, 3) AS nota_media_usuarios,\n       ROUND(f.nota_imdb, 3) AS nota_imdb,\n       ROUND(ABS(r.nota_media_usuarios - f.nota_imdb), 3) AS divergencia\nFROM dim_reviews r\nJOIN dim_movies m ON m.sk_movie_id = r.sk_movie_id\nJOIN fact_movies_performance f ON f.sk_movie_id = m.sk_movie_id\nWHERE r.nota_media_usuarios IS NOT NULL\n  AND f.nota_imdb IS NOT NULL\n  AND r.qtd_avaliacoes_usuarios >= 5\nORDER BY divergencia DESC\nLIMIT 10"
+  }
+]
